@@ -1,0 +1,90 @@
+# ============================================
+# Crypto Trading Bot - Configuration
+# ============================================
+
+# --- Trading Pairs ---
+# 動態選幣模式：每日自動選擇成交量前 N 名的幣種
+# 設為 "dynamic" 啟用動態選幣，或列出固定幣種
+symbols_mode: "dynamic"    # "dynamic" 或 "fixed"
+
+# 固定幣種（當 symbols_mode = "fixed" 時使用）
+symbols:
+  - "BTC/USDT:USDT"
+  - "ETH/USDT:USDT"
+
+# --- 動態選幣設定 ---
+pair_selector:
+  top_n: 20                          # 選前 20 名成交量
+  min_volume_usdt: 50000000          # 最低 24h 成交量 5000 萬 USDT
+  max_change_pct: 50                 # 排除 24h 漲跌超過 50% 的異常波動幣
+  always_include:                    # 必定包含的幣種
+    - "BTC/USDT:USDT"
+    - "ETH/USDT:USDT"
+  refresh_hours: 24                  # 每 24 小時重新選幣
+
+# --- Account Settings ---
+account:
+  total_capital: 25          # 小資金測試模式 (USDT) - 測試穩定後改回 125
+  leverage: 3                # Conservative leverage
+  margin_type: "isolated"    # isolated or cross
+
+# --- Risk Management ---
+risk:
+  risk_per_trade: 0.02      # 2% per trade
+  max_open_positions: 2     # Max simultaneous positions
+  max_drawdown_pct: 12      # Max drawdown before pause (%)
+  loss_streak_limit: 4      # Consecutive losses before reducing risk
+  risk_reduced: 0.01        # Reduced risk per trade (1%)
+  daily_loss_limit: 0.05    # Max daily loss 5%
+  trailing_stop: true       # Enable trailing stop
+
+# --- Grid Strategy ---
+grid:
+  enabled: false            # Disabled for now - grid needs more optimization
+  grid_count: 6             # Fewer grids = wider spacing = better R:R
+  grid_spacing_pct: 0.6     # Wider spacing (%)
+  position_per_grid: 0.10   # 10% of capital per grid
+  take_profit_pct: 0.5      # Larger take profit per grid (%)
+  timeframe: "15m"
+  # Grid range detection
+  lookback_bars: 96         # 24 hours of 15m bars for range detection
+  range_threshold: 0.03     # ADX below this = ranging market
+
+# --- Trend Strategy ---
+trend:
+  enabled: true
+  fast_ema: 12              # Fast EMA period
+  slow_ema: 26              # Slow EMA period
+  signal_ema: 9             # Signal line (MACD style)
+  rsi_period: 14
+  rsi_overbought: 70        # Slightly relaxed
+  rsi_oversold: 30
+  atr_period: 14
+  atr_sl_multiplier: 1.8    # Wider stop loss
+  atr_tp_multiplier: 2.5    # Better R:R ratio
+  volume_filter: true       # Require above-average volume
+  timeframe: "15m"          # Higher timeframe = less noise
+  confirm_timeframe: "1h"   # Confirmation timeframe
+  candle_limit: 200
+
+# --- Strategy Selector ---
+strategy_selector:
+  adx_period: 14
+  adx_trend_threshold: 25   # ADX > 25 = trending
+  adx_range_threshold: 20   # ADX < 20 = ranging
+  recheck_interval: 300     # Re-evaluate every 5 minutes (seconds)
+
+# --- Notifications ---
+notifications:
+  telegram_enabled: true     # Telegram notifications enabled
+  notify_on_trade: true
+  notify_on_error: true
+  notify_daily_summary: true
+  daily_summary_hour: 8     # 8 AM UTC+8
+
+# --- System ---
+system:
+  loop_interval: 30         # Scan interval (seconds)
+  log_file: "trading.log"
+  trade_log_dir: "trades"
+  data_dir: "data"
