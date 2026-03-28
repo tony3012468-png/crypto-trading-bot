@@ -12,9 +12,14 @@ from rich.layout import Layout
 from rich.text import Text
 from rich.live import Live
 import time
+import sys
+import io
 
 logger = logging.getLogger(__name__)
-console = Console()
+# 設定 UTF-8 編碼以支持繁體中文
+if sys.stdout.encoding != 'utf-8':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+console = Console(force_terminal=True, width=120, legacy_windows=False)
 
 
 class Dashboard:
@@ -135,9 +140,12 @@ class Dashboard:
             elif state == "ranging":
                 state_text = Text("震盪", style="bold yellow")
                 strategy = "網格交易"
+            elif state == "trend_only":
+                state_text = Text("趨勢", style="bold green")
+                strategy = "趨勢跟踪"
             else:
                 state_text = Text("混合", style="bold white")
-                strategy = "網格交易"
+                strategy = "趨勢跟踪"  # 預設改為趨勢跟踪
 
             short_symbol = symbol.split("/")[0] if "/" in symbol else symbol
             table.add_row(short_symbol, state_text, strategy)
@@ -181,7 +189,7 @@ class Dashboard:
         risk_text.append(f"  |  連虧: ", style="white")
         risk_text.append(f"{streak}/{limit}", style=streak_color)
         risk_text.append(f"  |  風險/筆: ", style="white")
-        risk_text.append(f"{risk_status.get('current_risk_pct', 2):.1f}%", style="cyan")
+        risk_text.append(f"{risk_status.get('current_risk_pct', 0.02) * 100:.1f}%", style="cyan")
 
         can_trade = risk_status.get("can_trade", True)
         if can_trade:

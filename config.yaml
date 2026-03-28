@@ -14,7 +14,7 @@ symbols:
 
 # --- 動態選幣設定 ---
 pair_selector:
-  top_n: 20                          # 選前 20 名成交量
+  top_n: 35                          # 提升至 35 個，增加交易機會
   min_volume_usdt: 50000000          # 最低 24h 成交量 5000 萬 USDT
   max_change_pct: 50                 # 排除 24h 漲跌超過 50% 的異常波動幣
   always_include:                    # 必定包含的幣種
@@ -24,18 +24,19 @@ pair_selector:
 
 # --- Account Settings ---
 account:
-  total_capital: 25          # 小資金測試模式 (USDT) - 測試穩定後改回 125
+  total_capital: 500         # 升級為 500 USDT（老闆指示）
   leverage: 3                # Conservative leverage
   margin_type: "isolated"    # isolated or cross
 
 # --- Risk Management ---
+# 策略：5% 每筆風險 + 35 交易對，目標月利 200 USDT
 risk:
-  risk_per_trade: 0.02      # 2% per trade
-  max_open_positions: 2     # Max simultaneous positions
-  max_drawdown_pct: 12      # Max drawdown before pause (%)
+  risk_per_trade: 0.05      # 5% per trade（從 2% 提升）
+  max_open_positions: 3     # 允許最多 3 個同時持倉（從 2 提升）
+  max_drawdown_pct: 20      # 提高至 20%（配合更高風險）
   loss_streak_limit: 4      # Consecutive losses before reducing risk
-  risk_reduced: 0.01        # Reduced risk per trade (1%)
-  daily_loss_limit: 0.05    # Max daily loss 5%
+  risk_reduced: 0.025       # Reduced risk per trade (2.5%)
+  daily_loss_limit: 0.10    # Max daily loss 10%（對應 5% 風險）
   trailing_stop: true       # Enable trailing stop
 
 # --- Grid Strategy ---
@@ -80,7 +81,7 @@ notifications:
   notify_on_trade: true
   notify_on_error: true
   notify_daily_summary: true
-  daily_summary_hour: 8     # 8 AM UTC+8
+  daily_summary_hour: 19    # 7 PM UTC+8
 
 # --- System ---
 system:

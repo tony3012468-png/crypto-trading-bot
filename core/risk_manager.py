@@ -5,10 +5,15 @@
 回撤監控、連續虧損追蹤等風控功能。
 """
 
+import json
 import logging
+from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Dict, Any
 
 logger = logging.getLogger(__name__)
+
+STATE_FILE = Path(__file__).parent.parent / "data" / "risk_state.json"
 
 
 class RiskManager:
@@ -53,6 +58,9 @@ class RiskManager:
             self.max_open_positions,
             self.max_drawdown_pct,
         )
+
+        # 嘗試從持久化檔案恢復狀態
+        self._load_state()
 
     def can_open_trade(self, current_positions: int, daily_pnl: float) -> bool:
         """
@@ -249,6 +257,82 @@ class RiskManager:
             win_rate,
             self.total_pnl,
         )
+
+    def sync_from_exchange(self, exchange) -> None:
+        """
+        從幣安 API 同步真實交易歷史（重啟後呼叫）。
+        只同步距上次記錄後的新成交，避免重複計算。
+        """
+        try:
+            ex = exchange.exchange
+            since_days = 90  # 最多回溯 90 天
+            since_ms = int((datetime.now() - timedelta(days=since_days)).timestamp() * 1000)
+
+            # 已實現盈虧
+            income = ex.fapiPrivateGetIncome({
+                'incomeType': 'REALIZED_PNL',
+                'limit': 1000,
+                'startTime': since_ms,
+            })
+            # 手續費
+            fees = ex.fapiPrivateGetIncome({
+                'incomeType': 'COMMISSION',
+                'limit': 1000,
+                'startTime': since_ms,
+            })
+
+            total_pnl = sum(float(i['income']) for i in income)
+            total_fees = sum(float(f['income']) for f in fees)
+            net_pnl = total_pnl + total_fees  # fees 本身是負數
+
+            win_trades = [i for i in income if float(i['income']) > 0]
+            loss_trades = [i for i in income if float(i['income']) < 0]
+
+            self.total_pnl = net_pnl
+            self.trade_count = len(income)
+            self.win_count = len(win_trades)
+
+            logger.info(
+                "從幣安同步交易歷史 | 共 %d 筆 | 勝 %d | 負 %d | 已實現PnL: %.2f | 手續費: %.2f | 淨: %.2f USDT",
+                len(income), len(win_trades), len(loss_trades),
+                total_pnl, total_fees, net_pnl
+            )
+            self._save_state()
+        except Exception as e:
+            logger.warning(f"從幣安同步交易歷史失敗: {e}")
+
+    def _save_state(self) -> None:
+        """將當前狀態存入 JSON 檔案"""
+        try:
+            STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+            state = {
+                "total_pnl": self.total_pnl,
+                "trade_count": self.trade_count,
+                "win_count": self.win_count,
+                "consecutive_losses": self.consecutive_losses,
+                "peak_balance": self.peak_balance,
+                "saved_at": datetime.now().isoformat(),
+            }
+            STATE_FILE.write_text(json.dumps(state, indent=2), encoding="utf-8")
+        except Exception as e:
+            logger.warning(f"儲存風控狀態失敗: {e}")
+
+    def _load_state(self) -> None:
+        """從 JSON 檔案恢復上次的狀態"""
+        try:
+            if STATE_FILE.exists():
+                state = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+                self.total_pnl = state.get("total_pnl", 0.0)
+                self.trade_count = state.get("trade_count", 0)
+                self.win_count = state.get("win_count", 0)
+                self.consecutive_losses = state.get("consecutive_losses", 0)
+                saved_at = state.get("saved_at", "unknown")
+                logger.info(
+                    "已恢復風控狀態 | 總交易: %d | 勝: %d | PnL: %.2f USDT | 存檔時間: %s",
+                    self.trade_count, self.win_count, self.total_pnl, saved_at
+                )
+        except Exception as e:
+            logger.warning(f"載入風控狀態失敗: {e}")
 
     def get_drawdown_pct(self) -> float:
         """
