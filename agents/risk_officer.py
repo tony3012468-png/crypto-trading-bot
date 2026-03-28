@@ -8,6 +8,8 @@
 - 提出倉位調整建議
 """
 
+from datetime import datetime, timedelta
+
 from agents.base_agent import BaseAgent
 from core.risk_manager import RiskManager
 
@@ -19,6 +21,8 @@ class RiskOfficer(BaseAgent):
     role = "風險評估、回撤監控、預警通知"
     emoji = "🛡️"
 
+    ALERT_COOLDOWN_HOURS = 1  # 同一種警報最少間隔 1 小時
+
     def __init__(self, config: dict, risk_manager: RiskManager = None,
                  exchange=None, notifier=None):
         super().__init__(config, exchange, notifier)
@@ -28,6 +32,8 @@ class RiskOfficer(BaseAgent):
             "drawdown_danger": 0.85, # 85% 發出危險警報
             "streak_warn": 0.6,      # 連虧達到限制的 60% 警告
         }
+        # 記錄各種警報最後發送時間，避免重複轟炸
+        self._last_alert_time: dict = {}
 
     def analyze(self) -> dict:
         """分析當前風控狀態"""
@@ -117,7 +123,7 @@ class RiskOfficer(BaseAgent):
 
         lines = [
             f"{self.emoji} 風控官報告 | {self._now_str()}",
-            -" * 35,
+            "-" * 35,
             f"風險等級：{level_icon} {risk_level}",
             f"帳戶餘額：{status.get('current_balance', 0):.2f} USDT",
             f"當日損益：{status.get('daily_pnl', 0):+.2f} USDT",
@@ -139,14 +145,29 @@ class RiskOfficer(BaseAgent):
     def check_and_alert(self) -> bool:
         """
         快速檢查並在必要時發出預警（可在每次掃描後調用）。
+        同一種警報在冷卻時間內不重複發送。
 
         Returns:
-            True 表示有預警被發出
+            True 表示有新預警被發出
         """
         result = self.analyze()
         alerts = result.get("alerts", [])
-        if alerts and self.notifier:
-            alert_msg = f"{self.emoji} 風控預警\n" + "\n".join(alerts)
+        if not alerts or not self.notifier:
+            return False
+
+        now = datetime.now()
+        cooldown = timedelta(hours=self.ALERT_COOLDOWN_HOURS)
+
+        # 以警報內容為 key，過濾掉冷卻中的警報
+        new_alerts = []
+        for alert in alerts:
+            last_sent = self._last_alert_time.get(alert)
+            if last_sent is None or (now - last_sent) >= cooldown:
+                new_alerts.append(alert)
+                self._last_alert_time[alert] = now
+
+        if new_alerts:
+            alert_msg = f"{self.emoji} 風控預警\n" + "\n".join(new_alerts)
             self.send_report(alert_msg)
             return True
         return False

@@ -185,6 +185,8 @@ def main(shared_company=None):
     last_daily_reset = date.today()
     last_pair_refresh = datetime.now()
     refresh_hours = config.get("pair_selector", {}).get("refresh_hours", 24)
+    open_failed_cooldown: dict = {}   # {symbol: datetime} 開倉失敗冷卻
+    FAILED_OPEN_COOLDOWN_MINS = 10    # 開倉失敗後 10 分鐘不重試
 
     logger.info(f"開始交易循環 | 掃描間隔: {loop_interval}秒 | 交易對數: {len(symbols)}")
     logger.info("=" * 60)
@@ -305,6 +307,11 @@ def main(shared_company=None):
                         if risk_manager.can_open_trade(
                             position_count, risk_status.get("daily_pnl", 0)
                         ):
+                            # 開倉失敗冷卻：10 分鐘內不重試同一個交易對
+                            failed_at = open_failed_cooldown.get(symbol)
+                            if failed_at and (datetime.now() - failed_at).total_seconds() < FAILED_OPEN_COOLDOWN_MINS * 60:
+                                continue
+
                             if not exchange.has_position(symbol):
                                 risk_pct = risk_manager.get_current_risk_pct()
                                 sl_distance = abs(signal["entry"] - signal["stop_loss"])
@@ -344,6 +351,7 @@ def main(shared_company=None):
 
                                     if trade_result and trade_result.get("status") == "open":
                                         position_count += 1
+                                        open_failed_cooldown.pop(symbol, None)  # 成功開倉：清除冷卻
                                         actual_price = trade_result.get("price", signal["entry"])
 
                                         # 執行工程師：記錄執行品質
@@ -358,6 +366,10 @@ def main(shared_company=None):
                                             sl_price, tp_price,
                                             strategy.get_strategy_name(),
                                         )
+                                    else:
+                                        # 開倉失敗（保證金不足等）：進入冷卻
+                                        open_failed_cooldown[symbol] = datetime.now()
+                                        logger.info(f"{symbol} 開倉失敗，{FAILED_OPEN_COOLDOWN_MINS} 分鐘內不重試")
 
                 except Exception as e:
                     logger.error(f"{symbol} 處理失敗: {e}")

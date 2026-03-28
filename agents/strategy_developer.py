@@ -8,11 +8,16 @@
 - 淘汰長期表現差的策略，持續引入新組合
 """
 
+import json
 import logging
 import itertools
+from datetime import datetime
+from pathlib import Path
 from agents.base_agent import BaseAgent
 
 logger = logging.getLogger(__name__)
+
+SCORES_FILE = Path(__file__).parent.parent / "data" / "strategy_scores.json"
 
 
 class StrategyDeveloper(BaseAgent):
@@ -34,6 +39,9 @@ class StrategyDeveloper(BaseAgent):
 
         # 初始化策略庫
         self._build_strategy_library()
+
+        # 從磁碟載入歷史競賽分數（跨進程、跨重啟保留）
+        self._load_scores()
 
     # ──────────────────────────────────────────────
     # 策略庫建立
@@ -185,6 +193,34 @@ class StrategyDeveloper(BaseAgent):
 
         if to_remove:
             logger.info(f"[策略開發員] 淘汰 {len(to_remove)} 個低分策略")
+
+        # 每次更新後立即存檔，確保崩潰或重啟不遺失結果
+        self._save_scores()
+
+    def _save_scores(self):
+        """將競賽分數存入磁碟"""
+        try:
+            SCORES_FILE.parent.mkdir(parents=True, exist_ok=True)
+            data = {
+                "saved_at": datetime.now().isoformat(),
+                "total_tested": len(self._strategy_scores),
+                "scores": self._strategy_scores,
+            }
+            SCORES_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+            logger.debug(f"[策略開發員] 已存檔 {len(self._strategy_scores)} 個策略分數")
+        except Exception as e:
+            logger.warning(f"[策略開發員] 存檔失敗: {e}")
+
+    def _load_scores(self):
+        """從磁碟載入歷史競賽分數"""
+        try:
+            if SCORES_FILE.exists():
+                data = json.loads(SCORES_FILE.read_text(encoding="utf-8"))
+                self._strategy_scores = data.get("scores", {})
+                saved_at = data.get("saved_at", "unknown")
+                logger.info(f"[策略開發員] 載入歷史分數：{len(self._strategy_scores)} 個策略，存檔於 {saved_at}")
+        except Exception as e:
+            logger.warning(f"[策略開發員] 載入歷史分數失敗: {e}")
 
     def get_best_strategies(self, top_n: int = 5) -> list[dict]:
         """取得目前評分最高的前 N 個策略"""
